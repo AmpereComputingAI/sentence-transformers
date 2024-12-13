@@ -191,6 +191,7 @@ class SentenceTransformer(nn.Sequential, FitMixin, PeftAdapterMixin):
         self._model_card_text = None
         self._model_config = {}
         self.backend = backend
+        self.traced = None
         if use_auth_token is not None:
             warnings.warn(
                 "The `use_auth_token` argument is deprecated and will be removed in v4 of SentenceTransformers.",
@@ -684,7 +685,11 @@ class SentenceTransformer(nn.Sequential, FitMixin, PeftAdapterMixin):
         if self.module_kwargs is None:
             return super().forward(input)
 
-        for module_name, module in self.named_children():
+        if self.traced is None:
+            self.traced = {}
+            for module_name, module in self.named_children():
+                self.traced[module_name] = torch.compile(module, backend="inductor")
+        for module_name, module in self.traced.items():
             module_kwarg_keys = self.module_kwargs.get(module_name, [])
             module_kwargs = {key: value for key, value in kwargs.items() if key in module_kwarg_keys}
             input = module(input, **module_kwargs)
